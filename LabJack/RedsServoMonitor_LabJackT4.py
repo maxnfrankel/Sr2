@@ -56,11 +56,9 @@ while True:
     
     alpha_error = results[0] # alpha_error measured from AIN0
     output.append(alpha_error)
-    output.append(alpha_error)
     print(alpha_error)
 
     beta_error = results[1] # beta_error measured from AIN1
-    output.append(beta_error)
     output.append(beta_error)
     print(beta_error)
 
