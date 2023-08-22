@@ -30,7 +30,7 @@ ______________________________________
 
 # open LabJack
 
-handle = ljm.openS("T4", "ANY", "ANY") # T4 device, any connection, any identifier
+handle = ljm.openS("T4", "ANY", "192.168.1.100") # T4 device, any connection, and identifier IP address: 192.168.1.100
 
 info = ljm.getHandleInfo(handle)
 print("Opened a LabJack with Device type: %i, Connection type: %i,\n"
