@@ -1,6 +1,6 @@
 from labjack import ljm
-from influxdb_client import InfluxDBClient, Point, WritePrecision
-from influxdb_client.client.write_api import SYNCHRONOUS
+"""from influxdb_client import InfluxDBClient, Point, WritePrecision
+from influxdb_client.client.write_api import SYNCHRONOUS"""
 
 # local constants for shortening commands
 WRITE = ljm.constants.WRITE
@@ -34,7 +34,7 @@ def readwrite_labjack(DAC0_val, DAC1_val):
     """
 
     # open LabJack
-    handle = ljm.openS("T4", "ANY", "192.168.1.100") # T4 device, any connection, and identifier IP address: 192.168.1.100
+    handle = ljm.openS("T4", "ANY", "440011420") # T4 device, any connection, and identifier serial number: "440011420"
 
     info = ljm.getHandleInfo(handle)
     print("Opened a LabJack with Device type: %i, Connection type: %i,\n"
@@ -58,5 +58,7 @@ def readwrite_labjack(DAC0_val, DAC1_val):
 
     # Close handle
     ljm.close(handle)
+
+readwrite_labjack(0,0)
 
 # write to influxDB
