@@ -47,7 +47,7 @@ while True:
     handle = ljm.openS("T4", "ANY", serialno) # T4 device, any connection, and identifier serial number: "440011420"
 
     numFrames = 2 # number of frames we want to access
-    aNames = ['AIN0','AIN1'] # names of the frames
+    aNames = ['AIN0','AIN2'] # names of the frames
     aWrites = [READ, READ] # access typed
     aNumValues = [1, 1] # number of values read/written to each frame
 
