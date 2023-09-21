@@ -5,7 +5,7 @@ from influxdb_client import InfluxDBClient
 from influxdb_client.client.write_api import SYNCHRONOUS
 
 # connect to device over the network
-addresses = ['192.168.1.101','192.168.1.8','192.168.1.8']
+addresses = ['192.168.1.101','192.168.1.8','192.168.1.102']
 measurements = ["Sr2_tens4_monitor", "Sr2_clock_monitor", "Sr2_imaging_monitor"]
 labels = ["tens4_frequency", "clock_frequency", "imaging_frequency"]
 
@@ -17,7 +17,7 @@ for address in addresses:
 for i,inst in enumerate(insts):
     print(inst.ask('*IDN?'))# returns device info
 
-    # commands are written to and from the instrument using 
+    # commands are written to and from the instrument using SCPI 
     inst.write(':CALC:MARK1:CPE:STAT ON')
 
 while True:
