@@ -5,9 +5,9 @@ from influxdb_client import InfluxDBClient
 from influxdb_client.client.write_api import SYNCHRONOUS
 
 # connect to device over the network
-addresses = ['192.168.1.101','192.168.1.8']
-measurements = ["Sr2_tens4_monitor", "Sr2_clock_monitor"]
-labels = ["tens4_frequency", "clock_frequency"]
+addresses = ['192.168.1.101','192.168.1.8','192.168.1.8']
+measurements = ["Sr2_tens4_monitor", "Sr2_clock_monitor", "Sr2_imaging_monitor"]
+labels = ["tens4_frequency", "clock_frequency", "imaging_frequency"]
 
 insts = []
 
