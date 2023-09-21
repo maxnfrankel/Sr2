@@ -28,8 +28,8 @@ ______________________________________
 |                                    |
 | FIO5 : UINT16                   VS |
 | FIO4 : UINT16                  GND |
-| GND                  AIN0 : FLOAT32|
-| VS                   AIN1 : FLOAT32|
+| GND                  AIN0 : FLOAT32| - alpha current error
+| VS                   AIN1 : FLOAT32| - alpha piezo error
 --------------------------------------
 """
 
@@ -40,27 +40,43 @@ FLOAT32 = ljm.constants.UINT16
 UINT32 = ljm.constants.UINT32
 
 while True:
-    labels = ['alpha_error', 'beta_error']
+    labels = ['alpha_current_error', 'alpha_piezo_error', 'beta_current_error', 'beta_piezo_error']
     output = []
 
     # open LabJack
     handle = ljm.openS("T4", "ANY", serialno) # T4 device, any connection, and identifier serial number: "440011420"
 
+<<<<<<< Updated upstream
     numFrames = 2 # number of frames we want to access
     aNames = ['AIN0','AIN2'] # names of the frames
     aWrites = [READ, READ] # access typed
     aNumValues = [1, 1] # number of values read/written to each frame
+=======
+    numFrames = 4 # number of frames we want to access
+    aNames = ['AIN0','AIN1','AIN2','AIN3'] # names of the frames
+    aWrites = [READ, READ, READ, READ] # access typed
+    aNumValues = [1, 1, 1, 1] # number of values read/written to each frame
+>>>>>>> Stashed changes
 
-    aValues = [0, 0] # value to write, in V (0 if read)
+    aValues = [0, 0, 0, 0] # value to write, in V (0 if read)
     results = ljm.eNames(handle, numFrames, aNames, aWrites, aNumValues, aValues) # the results are read out as a list of values
     
-    alpha_error = results[0] # alpha_error measured from AIN0
-    output.append(alpha_error)
-    print(alpha_error)
+    alpha_current_error = results[0] # alpha_current_error measured from AIN0
+    output.append(alpha_current_error)
+    print(alpha_current_error)
+    
+    alpha_piezo_error = results[1] # alpha_piezo_error measured from AIN1
+    output.append(alpha_piezo_error)
+    print(alpha_piezo_error)
 
-    beta_error = results[1] # beta_error measured from AIN1
-    output.append(beta_error)
-    print(beta_error)
+    beta_current_error = results[2] # beta_current_error measured from AIN2
+    output.append(beta_current_error)
+    print(beta_current_error)
+
+    beta_piezo_error = results[3] # beta_piezo_error measured from AIN3
+    output.append(beta_piezo_error)
+    print(beta_piezo_error)
+
 
     records=[
             {
