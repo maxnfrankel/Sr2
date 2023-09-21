@@ -23,8 +23,8 @@ ______________________________________
 |                                    |
 | FIO7 : UINT16                   VS |
 | FIO6 : UINT16                  GND |
-| GND                  AIN2 : FLOAT32|
-| VS                   AIN3 : FLOAT32|
+| GND                  AIN2 : FLOAT32| - beta current error
+| VS                   AIN3 : FLOAT32| - beta piezo error
 |                                    |
 | FIO5 : UINT16                   VS |
 | FIO4 : UINT16                  GND |
