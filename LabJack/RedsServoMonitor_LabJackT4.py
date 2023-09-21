@@ -63,6 +63,7 @@ while True:
     print(alpha_piezo_error)
 
     beta_current_error = results[2] # beta_current_error measured from AIN2
+    beta_current_error += 0.2 # the beta_current_error seems to have the offset of -0.2V. This is not a true offset -> was measured on the  "DC error" readout port but not the error in port
     output.append(beta_current_error)
     print(beta_current_error)
 
