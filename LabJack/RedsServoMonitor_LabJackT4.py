@@ -45,7 +45,8 @@ while True:
 
     # open LabJack
     handle = ljm.openS("T4", "ANY", serialno) # T4 device, any connection, and identifier serial number: "440011420"
-
+    
+    info = ljm.getHandleInfo(handle)
     numFrames = 4 # number of frames we want to access
     aNames = ['AIN0','AIN1','AIN2','AIN3'] # names of the frames
     aWrites = [READ, READ, READ, READ] # access typed
@@ -63,7 +64,6 @@ while True:
     print(alpha_piezo_error)
 
     beta_current_error = results[2] # beta_current_error measured from AIN2
-    beta_current_error += 0.2 # the beta_current_error seems to have the offset of -0.2V. This is not a true offset -> was measured on the  "DC error" readout port but not the error in port
     output.append(beta_current_error)
     print(beta_current_error)
 
@@ -81,6 +81,8 @@ while True:
             }
         ]
     print(records)
+    print("device type: %i, connection type: %i, \n"
+            "serial no: %i, ip: %s, port: %i, \n max byes per mb: %i" %(info[0],info[1], info[2], ljm.numberToIP(info[3]), info[4], info[5]))
 
     token = 'yelabtoken'
     org = 'yelab'
