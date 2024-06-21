@@ -11,47 +11,62 @@ from picosdk.functions import adc2mV, assert_pico_ok, mV2adc
 import h5py
 
 # uses example code from https://github.com/picotech/picosdk-python-wrappers/blob/master/ps5000aExamples/ps5000aBlockExample.py
+# and https://github.com/picotech/picosdk-python-wrappers/blob/master/ps3000aExamples/ps3000aBlockExample.py
 # combined with Will Milner's picoscope_labrad_server.py code
 
 class PicoscopeServer(ThreadedServer):
     name = '%LABRADNODE%_picoscope'
-    update = Signal(698461, 'signal: update', 's') # not sure what this does
+    update = Signal(698461, 'signal: update', 's') #?
 
     def initServer(self):
-
         # Create chandle and self.status ready for use
         self.chandle = ctypes.c_int16()
         self.status = {}
-    """
+
     @setting(1)
     def set_recordduration_5000a(self,c,duration,presamples,postsamples):
+        # TODO: - add option to change device resolution. 4ch requires 14bit, 2ch can do 16
+        #       - add option to select number of channels without having to go in and edit the get_data method
+        # Inputs:
+        #   c: context varaible passed when the conductor accesses this labrad server. See https://github.com/PickyPointer/SrE/wiki/Labrad_Tools-overview for more details
+        #   duration: record duration in s
+        #   presamples: number of samples before external trigger
+        #   postsamples: number of samples after external trigger
 
-        #self.timebase = 627 # 5us per sample # determines sampling rate. (n-2)/125000000 s/sample for both 15-bit operation on the ps5000a and 8-bit on the ps3000a 
-            # See page 28 of picotech.com/download/manuals/picoscope-5000-series-a-api-programmers-guide.pdf
-            # See page 15 of https://www.picotech.com/download/manuals/picoscope-3000-series-a-api-programmers-guide.pdf
-        #self.preTriggerSamples = 0 # Set number of pre and post trigger samples to be collected
-        #self.postTriggerSamples = 10000
-        #self.maxSamples = self.preTriggerSamples + self.postTriggerSamples
-        
+        # timebase calculation from duration and # of samples
+        # See page 28 of picotech.com/download/manuals/picoscope-5000-series-a-api-programmers-guide.pdf
+        # 4 channels, 14-bit: (n-2)/125000000 s/sample
+        # 2 channels, 15-bit: (n-2)/125000000 s/sample
+        # 1 channels, 16-bit: (n-3)/62500000 s/sample
+        # where n is an integer used to specify the picoscope timebase
+                
+        self.resolution = ps5.PS5000A_DEVICE_RESOLUTION["PS5000A_DR_14BIT"]
         self.preTriggerSamples = presamples # Set number of pre and post trigger samples to be collected
         self.postTriggerSamples = postsamples
         self.maxSamples = self.preTriggerSamples + self.postTriggerSamples
         self.timebase = round(duration/self.maxSamples*125000000 + 2)
-    """
-
+    
+        print(f'\ndur={duration}s timebase={self.timebase} pre_trig_samples={presamples} post_trig_samples={postsamples}')
+    
     @setting(2)
-    def set_recordduration(self,c,duration,presamples,postsamples):
+    def set_recordduration_3000a(self,c,duration,presamples,postsamples):
+        # Inputs:
+            #   c: context varaible passed when the conductor accesses this labrad server. See https://github.com/PickyPointer/SrE/wiki/Labrad_Tools-overview for more details
+            #   duration: record duration in s
+            #   presamples: number of samples before external trigger
+            #   postsamples: number of samples after external trigger
 
-        # we want to sample x32 more and then average back down to try to make up for the 5 less bits of resolution
-        # TODO: make a separate command for ps3000a and ps5000a in the future
+        # timebase calculation from duration and # of samples
+        # See page 15 of picotech.com/download/manuals/picoscope-3000-series-a-api-programmers-guide.pdf
+        # 3000D series
+        # 4 channels, 8-bit: (n-2)/125000000 s/sample
+        # where n is an integer used to specify the picoscope timebase
+        # ps3000a doesn't have the option to set device resolution
 
-        #self.timebase = 627 # 5us per sample # determines sampling rate. (n-2)/125000000 s/sample for both 15-bit operation on the ps5000a and 8-bit on the ps3000a 
-            # See page 28 of picotech.com/download/manuals/picoscope-5000-series-a-api-programmers-guide.pdf
-            # See page 15 of https://www.picotech.com/download/manuals/picoscope-3000-series-a-api-programmers-guide.pdf
-        #self.preTriggerSamples = 0 # Set number of pre and post trigger samples to be collected
-        #self.postTriggerSamples = 10000
-        #self.maxSamples = self.preTriggerSamples + self.postTriggerSamples
-        
+        # picoscope can only sample at 8bits of resolution
+        # we want to sample x32 more and then average back down to try to make up for the 7 less bits of resolution
+
+
         self.preTriggerSamples = presamples*32 # Set number of pre and post trigger samples to be collected
         self.postTriggerSamples = postsamples*32
         self.maxSamples = self.preTriggerSamples + self.postTriggerSamples
@@ -60,14 +75,12 @@ class PicoscopeServer(ThreadedServer):
         print(f'\ndur={duration}s timebase={self.timebase} pre_trig_samples={presamples} post_trig_samples={postsamples} x32 sampling but avged back down again')
     
     @setting(3)
-    def get_data_5000a(self,c,path):
+    def get_data_5000a(self,c,path,serial_no):
         # based off of https://github.com/picotech/picosdk-python-wrappers/blob/master/ps5000aExamples/ps5000aBlockExample.py
 
             ## PICOSDK CODE ##
 
-        self.serial_no = ctypes.create_string_buffer(bytes('IV947/0114',encoding='utf-8'))
-        # Resolution set to 12 Bit
-        self.resolution = ps5.PS5000A_DEVICE_RESOLUTION["PS5000A_DR_15BIT"]
+        self.serial_no = ctypes.create_string_buffer(bytes(serial_no,encoding='utf-8'))
 
         # Open 5000 series PicoScope
         # Returns handle to chandle for use in future API functions
@@ -89,76 +102,72 @@ class PicoscopeServer(ThreadedServer):
             assert_pico_ok(self.status["changePowerSource"])
 
         # Set up channel A
-        # handle = chandle
         channel = ps5.PS5000A_CHANNEL["PS5000A_CHANNEL_A"]
-        # enabled = 1
+        enabled = 1
         coupling_type = ps5.PS5000A_COUPLING["PS5000A_DC"]
-        # chARange = ps.PS5000A_RANGE["PS5000A_10V"]
-        chARange = ps5.PS5000A_RANGE["PS5000A_5V"]
-        # analogue offset = 5 V
-        analog_offset=0#-5
-        self.status["setChA"] = ps5.ps5000aSetChannel(self.chandle, channel, 1, coupling_type, chARange, analog_offset)
+        chARange = ps5.PS5000A_RANGE["PS5000A_10V"] # range is +- around 0V
+        analog_offset=0 # voltage to add to the input channel before digitization 
+        self.status["setChA"] = ps5.ps5000aSetChannel(self.chandle, channel, enabled, coupling_type, chARange, analog_offset)
         assert_pico_ok(self.status["setChA"])
 
         # Set up channel B
-        # handle = chandle
         channel = ps5.PS5000A_CHANNEL["PS5000A_CHANNEL_B"]
-        # enabled = 1
-        # coupling_type = ps.PS5000A_COUPLING["PS5000A_DC"]
-        chBRange = ps5.PS5000A_RANGE["PS5000A_5V"]
-        # analogue offset = 5 V
-        self.status["setChB"] = ps5.ps5000aSetChannel(self.chandle, channel, 1, coupling_type, chBRange, analog_offset)
+        enabled = 1
+        chBRange = ps5.PS5000A_RANGE["PS5000A_10V"]
+        analog_offset=0 # voltage to add to the input channel before digitization 
+        self.status["setChB"] = ps5.ps5000aSetChannel(self.chandle, channel, enabled, coupling_type, chBRange, analog_offset)
         assert_pico_ok(self.status["setChB"])
 
+        # Set up channel C
+        channel = ps5.PS5000A_CHANNEL["PS5000A_CHANNEL_C"]
+        enabled = 1
+        chCRange = ps5.PS5000A_RANGE["PS5000A_10V"]
+        analog_offset=0 # voltage to add to the input channel before digitization 
+        self.status["setChC"] = ps5.ps5000aSetChannel(self.chandle, channel, enabled, coupling_type, chCRange, analog_offset)
+        assert_pico_ok(self.status["setChC"])
+
+        # Set up channel D
+        channel = ps5.PS5000A_CHANNEL["PS5000A_CHANNEL_D"]
+        enabled = 1
+        chDRange = ps5.PS5000A_RANGE["PS5000A_10V"]
+        analog_offset=0 # voltage to add to the input channel before digitization 
+        self.status["setChD"] = ps5.ps5000aSetChannel(self.chandle, channel, enabled, coupling_type, chDRange, analog_offset)
+        assert_pico_ok(self.status["setChD"])
+
         # find maximum ADC count value
-        # handle = chandle
         # pointer to value = ctypes.byref(maxADC)
         maxADC = ctypes.c_int16()
         self.status["maximumValue"] = ps5.ps5000aMaximumValue(self.chandle, ctypes.byref(maxADC))
         assert_pico_ok(self.status["maximumValue"])
 
         # Set up single trigger
-        # handle = chandle
         enabled = 1
         source = ps5.PS5000A_CHANNEL["PS5000A_EXTERNAL"]
-        threshold = int(mV2adc(500,chARange, maxADC)) # def of mV2adc: https://github.com/picotech/picosdk-python-wrappers/blob/master/picosdk/functions.py#L42
-        # direction = PS5000A_RISING = 2
-        direction =  2
+        threshold = int(mV2adc(500,chARange, maxADC)) # 500mV threshold for trigger. For def of mV2adc: https://github.com/picotech/picosdk-python-wrappers/blob/master/picosdk/functions.py#L42
+        direction = ps5.PS5000A_THRESHOLD_DIRECTION["PS5000A_RISING"]
         delay = 0 # s
         autoTrigger_ms = 0 # setting to 0 makes scope wate indefinitely for a trigger - see page 115 of ps5000a programmer's guide
         self.status["trigger"] = ps5.ps5000aSetSimpleTrigger(self.chandle, enabled, source, threshold, enabled, delay, autoTrigger_ms) # (handle, enable, source, threshold, direction, delay, autoTrigger_ms)
 
         assert_pico_ok(self.status["trigger"])
 
-        # Set number of pre and post trigger samples to be collected
-        #self.preTriggerSamples = 5000
-        #self.postTriggerSamples = 5000
-        #self.maxSamples = self.preTriggerSamples + self.postTriggerSamples
-
         # Get self.timebase information
         # Warning: When using this example it may not be possible to access all Timebases as all channels are enabled by default when opening the scope.  
         # To access these Timebases, set any unused analogue channels to off.
-        # handle = chandle
-        #self.timebase = 8
-        # noSamples = self.maxSamples
         # pointer to timeIntervalNanoseconds = ctypes.byref(timeIntervalns)
         # pointer to self.maxSamples = ctypes.byref(returnedMaxSamples)
-        # segment index = 0
+        segment_index = 0
         timeIntervalns = ctypes.c_float()
         returnedMaxSamples = ctypes.c_int32()
-        self.status["getTimebase2"] = ps5.ps5000aGetTimebase2(self.chandle, self.timebase, self.maxSamples, ctypes.byref(timeIntervalns), ctypes.byref(returnedMaxSamples), 0)
+        self.status["getTimebase2"] = ps5.ps5000aGetTimebase2(self.chandle, self.timebase, self.maxSamples, ctypes.byref(timeIntervalns), ctypes.byref(returnedMaxSamples), segment_index)
         assert_pico_ok(self.status["getTimebase2"])
 
         # Run block capture
-        # handle = chandle
-        # number of pre-trigger samples = self.preTriggerSamples
-        # number of post-trigger samples = PostTriggerSamples
-        # self.timebase = 8 = 80 ns (see Programmer's guide for mre information on self.timebases)
-        # time indisposed ms = None (not needed in the example)
-        # segment index = 0
-        # lpReady = None (using ps5000aIsReady rather than ps5000aBlockReady)
-        # pParameter = None
-        self.status["runBlock"] = ps5.ps5000aRunBlock(self.chandle, self.preTriggerSamples, self.postTriggerSamples, self.timebase, None, 0, None, None)
+        timeIndisposedMs = None # not needed in the example
+        segmentIndex = 0
+        lpReady = None # using ps5000aIsReady rather than ps5000aBlockReady
+        pParameter = None
+        self.status["runBlock"] = ps5.ps5000aRunBlock(self.chandle, self.preTriggerSamples, self.postTriggerSamples, self.timebase, timeIndisposedMs, segmentIndex, lpReady, pParameter)
         assert_pico_ok(self.status["runBlock"])
 
         # Check for data collection to finish using ps5000aIsReady
@@ -168,13 +177,16 @@ class PicoscopeServer(ThreadedServer):
             self.status["isReady"] = ps5.ps5000aIsReady(self.chandle, ctypes.byref(ready))
 
         # Create buffers ready for assigning pointers for data collection
-        bufferAMax = (ctypes.c_int16 * self.maxSamples)()
-        bufferAMin = (ctypes.c_int16 * self.maxSamples)() # used for downsampling which isn't in the scope of this example
+        bufferAMax = (ctypes.c_int16 * self.maxSamples)() # used for downsampling which isn't in the scope of this example
+        bufferAMin = (ctypes.c_int16 * self.maxSamples)()
         bufferBMax = (ctypes.c_int16 * self.maxSamples)()
-        bufferBMin = (ctypes.c_int16 * self.maxSamples)() # used for downsampling which isn't in the scope of this example
+        bufferBMin = (ctypes.c_int16 * self.maxSamples)()
+        bufferCMax = (ctypes.c_int16 * self.maxSamples)()
+        bufferCMin = (ctypes.c_int16 * self.maxSamples)() 
+        bufferDMax = (ctypes.c_int16 * self.maxSamples)()
+        bufferDMin = (ctypes.c_int16 * self.maxSamples)() 
 
         # Set data buffer location for data collection from channel A
-        # handle = chandle
         source = ps5.PS5000A_CHANNEL["PS5000A_CHANNEL_A"]
         # pointer to buffer max = ctypes.byref(bufferAMax)
         # pointer to buffer min = ctypes.byref(bufferAMin)
@@ -185,15 +197,17 @@ class PicoscopeServer(ThreadedServer):
         assert_pico_ok(self.status["setDataBuffersA"])
 
         # Set data buffer location for data collection from channel B
-        # handle = chandle
         source = ps5.PS5000A_CHANNEL["PS5000A_CHANNEL_B"]
-        # pointer to buffer max = ctypes.byref(bufferBMax)
-        # pointer to buffer min = ctypes.byref(bufferBMin)
-        # buffer length = maxSamples
-        # segment index = 0
-        # ratio mode = PS5000A_RATIO_MODE_NONE = 0
         self.status["setDataBuffersB"] = ps5.ps5000aSetDataBuffers(self.chandle, source, ctypes.byref(bufferBMax), ctypes.byref(bufferBMin), self.maxSamples, 0, 0)
         assert_pico_ok(self.status["setDataBuffersB"])
+
+        source = ps5.PS5000A_CHANNEL["PS5000A_CHANNEL_C"]
+        self.status["setDataBuffersC"] = ps5.ps5000aSetDataBuffers(self.chandle, source, ctypes.byref(bufferCMax), ctypes.byref(bufferCMin), self.maxSamples, 0, 0)
+        assert_pico_ok(self.status["setDataBuffersC"])
+
+        source = ps5.PS5000A_CHANNEL["PS5000A_CHANNEL_D"]
+        self.status["setDataBuffersD"] = ps5.ps5000aSetDataBuffers(self.chandle, source, ctypes.byref(bufferDMax), ctypes.byref(bufferDMin), self.maxSamples, 0, 0)
+        assert_pico_ok(self.status["setDataBuffersD"])
 
         # create overflow loaction
         overflow = ctypes.c_int16()
@@ -213,6 +227,8 @@ class PicoscopeServer(ThreadedServer):
         # convert ADC counts data to mV
         adc2mVChAMax =  adc2mV(bufferAMax, chARange, maxADC)
         adc2mVChBMax =  adc2mV(bufferBMax, chBRange, maxADC)
+        adc2mVChCMax =  adc2mV(bufferCMax, chCRange, maxADC)
+        adc2mVChDMax =  adc2mV(bufferDMax, chDRange, maxADC)
 
         # Stop the scope
         # handle = chandle
@@ -227,32 +243,45 @@ class PicoscopeServer(ThreadedServer):
         # display self.status returns
         #print(self.status)
 
+        
             ## SAVING DATA ##
 
         # Create time data
         time = np.linspace(-self.preTriggerSamples*timeIntervalns.value, (self.postTriggerSamples - 1) * timeIntervalns.value, self.cmaxSamples.value)
-        
-        #"""
+
+        """
+        # 2-channel option
         # save data as a packed file
         packed = {}
         packed["time_ns"] = time
         packed["ChA_mV"] = adc2mVChAMax #- analog_offset*1e3 # Add the analog offset (which I believe is in V) to the mV trace
         packed["ChB_mV"] = adc2mVChBMax #- analog_offset*1e3
         np.savez(path,**packed)
+        """
+
+        #"""
+        # 4-channel option
+        # save data as a packed file
+        packed = {}
+        packed["time_ns"] = time
+        packed["ChA_mV"] = adc2mVChAMax
+        packed["ChB_mV"] = adc2mVChBMax 
+        packed["ChC_mV"] = adc2mVChCMax
+        packed["ChD_mV"] = adc2mVChDMax
+
+        np.savez(path,**packed)
         #"""
         
         print(f'Picoscope trace saved at {path}')
 
     @setting(4)
-    def get_data_3000a(self,c,path): 
+    def get_data_3000a(self,c,path,serial_no): 
         # initially from https://github.com/picotech/picosdk-python-wrappers/blob/master/ps5000aExamples/ps5000aBlockExample.py
         # modified to match https://github.com/picotech/picosdk-python-wrappers/blob/master/ps3000aExamples/ps3000aBlockExample.py
 
             ## PICOSDK CODE ##
             
-
-        self.serial_no = ctypes.create_string_buffer(bytes('IU888/0102',encoding='utf-8'))
-        # ps3000a doesn't seem to have the option to set device resolution
+        self.serial_no = ctypes.create_string_buffer(bytes(serial_no,encoding='utf-8'))
 
         # Open 3000 series PicoScope
         # Returns handle to chandle for use in future API functions
@@ -273,78 +302,47 @@ class PicoscopeServer(ThreadedServer):
 
             assert_pico_ok(self.status["ChangePowerSource"])
     
-        # STOPPED FOR THE DAY HERE
-        # picked up 6/17/24
-
         # Set up channel A
-        # handle = chandle
-        # channel = PS3000A_CHANNEL_A = 0
         channel = ps3.PS3000A_CHANNEL["PS3000A_CHANNEL_A"]
         enabled = 1
-        # coupling_type = PS3000A_10V = 1
         coupling_type = ps3.PS3000A_COUPLING["PS3000A_DC"]
-        # range = PS3000A_10V = 8
         chARange = ps3.PS3000A_RANGE["PS3000A_10V"]
-        # analogue offset = 0 V
         analog_offset=0
         self.status["setChA"] = ps3.ps3000aSetChannel(self.chandle, channel, enabled, coupling_type, chARange, analog_offset)
         assert_pico_ok(self.status["setChA"])
 
         # Set up channel B
-        # handle = chandle
-        # channel = PS3000A_CHANNEL_B = 1
         channel = ps3.PS3000A_CHANNEL["PS3000A_CHANNEL_B"]
-
-        # enabled = 1
-        # coupling_type = PS3000A_10V = 1
         coupling_type = ps3.PS3000A_COUPLING["PS3000A_DC"]
-        # range = PS3000A_10V = 8
         chBRange = ps3.PS3000A_RANGE["PS3000A_10V"]
-        # analogue offset = 0 V
         analog_offset=0
         self.status["setChB"] = ps3.ps3000aSetChannel(self.chandle, channel, enabled, coupling_type, chBRange, analog_offset)
         assert_pico_ok(self.status["setChB"])
 
         # Set up channel C
-        # handle = chandle
-        # channel = PS3000A_CHANNEL_C = 1
         channel = ps3.PS3000A_CHANNEL["PS3000A_CHANNEL_C"]
-        # enabled = 1
-        # coupling_type = PS3000A_10V = 1
         coupling_type = ps3.PS3000A_COUPLING["PS3000A_DC"]
-        # range = PS3000A_10V = 8
         chCRange = ps3.PS3000A_RANGE["PS3000A_10V"]
-        # analogue offset = 0 V
         analog_offset=0
         self.status["setChC"] = ps3.ps3000aSetChannel(self.chandle, channel, enabled, coupling_type, chCRange, analog_offset)
         assert_pico_ok(self.status["setChC"])
 
         # Set up channel D
-        # handle = chandle
-        # channel = PS3000A_CHANNEL_A = 1
         channel = ps3.PS3000A_CHANNEL["PS3000A_CHANNEL_D"]
-
-        # enabled = 1
-        # coupling_type = PS3000A_10V = 1
         coupling_type = ps3.PS3000A_COUPLING["PS3000A_DC"]
-        # range = PS3000A_10V = 8
         chDRange = ps3.PS3000A_RANGE["PS3000A_10V"]
-        # analogue offset = 0 V
         analog_offset=0
         self.status["setChD"] = ps3.ps3000aSetChannel(self.chandle, channel, enabled, coupling_type, chDRange, analog_offset)
         assert_pico_ok(self.status["setChD"])
 
         # find maximum ADC count value
-        # handle = chandle
         # pointer to value = ctypes.byref(maxADC)
         maxADC = ctypes.c_int16()
         self.status["maximumValue"] = ps3.ps3000aMaximumValue(self.chandle, ctypes.byref(maxADC))
         assert_pico_ok(self.status["maximumValue"])
 
         # Set up single trigger
-        # source = ps3000A_external = 0
         source = ps3.PS3000A_CHANNEL["PS3000A_EXTERNAL"]
-        # threshold = 1024 ADC counts
         threshold = int(mV2adc(500,chARange, maxADC)) # def of mV2adc: https://github.com/picotech/picosdk-python-wrappers/blob/master/picosdk/functions.py#L42
         direction = ps3.PS3000A_THRESHOLD_DIRECTION["PS3000A_RISING"]
         delay = 0 # s
@@ -352,11 +350,6 @@ class PicoscopeServer(ThreadedServer):
         self.status["trigger"] = ps3.ps3000aSetSimpleTrigger(self.chandle, 1, source, threshold, direction, delay, autoTrigger_ms) # (handle, enable, source, threshold, direction, delay, autoTrigger_ms)
 
         assert_pico_ok(self.status["trigger"])
-
-        # Set number of pre and post trigger samples to be collected
-        #self.preTriggerSamples = 5000
-        #self.postTriggerSamples = 5000
-        #self.maxSamples = self.preTriggerSamples + self.postTriggerSamples
 
         # Get self.timebase information
         # Warning: When using this example it may not be possible to access all Timebases as all channels are enabled by default when opening the scope.  
@@ -367,10 +360,6 @@ class PicoscopeServer(ThreadedServer):
         assert_pico_ok(self.status["GetTimebase"])
 
         # Run block capture
-        # handle = chandle
-        # number of pre-trigger samples = self.preTriggerSamples
-        # number of post-trigger samples = PostTriggerSamples
-        # self.timebase = 2 = 4 ns (see Programmer's guide for mre information on self.timebases)
         # time indisposed ms = None (not needed in the example)
         # segment index = 0
         # lpReady = None (using ps5000aIsReady rather than ps5000aBlockReady)
@@ -379,18 +368,16 @@ class PicoscopeServer(ThreadedServer):
         assert_pico_ok(self.status["runBlock"])
 
         # Create buffers ready for assigning pointers for data collection
-        bufferAMax = (ctypes.c_int16 * self.maxSamples)()
-        bufferAMin = (ctypes.c_int16 * self.maxSamples)() # used for downsampling which isn't in the scope of this example
+        bufferAMax = (ctypes.c_int16 * self.maxSamples)() # used for downsampling which isn't in the scope of this example
+        bufferAMin = (ctypes.c_int16 * self.maxSamples)() 
         bufferBMax = (ctypes.c_int16 * self.maxSamples)()
-        bufferBMin = (ctypes.c_int16 * self.maxSamples)() # used for downsampling which isn't in the scope of this example
+        bufferBMin = (ctypes.c_int16 * self.maxSamples)() 
         bufferCMax = (ctypes.c_int16 * self.maxSamples)()
-        bufferCMin = (ctypes.c_int16 * self.maxSamples)() # used for downsampling which isn't in the scope of this example
+        bufferCMin = (ctypes.c_int16 * self.maxSamples)() 
         bufferDMax = (ctypes.c_int16 * self.maxSamples)()
-        bufferDMin = (ctypes.c_int16 * self.maxSamples)() # used for downsampling which isn't in the scope of this example
+        bufferDMin = (ctypes.c_int16 * self.maxSamples)() 
 
         # Set data buffer location for data collection from channel A
-        # handle = chandle
-        # source = ps3.ps3000_channel_A = 0
         # pointer to buffer max = ctypes.byref(bufferAMax)
         # pointer to buffer min = ctypes.byref(bufferAMin)
         # buffer length = self.maxSamples
@@ -421,7 +408,6 @@ class PicoscopeServer(ThreadedServer):
             self.status["isReady"] = ps3.ps3000aIsReady(self.chandle, ctypes.byref(ready))
 
         # Retried data from scope to buffers assigned above
-        # handle = chandle
         # start index = 0
         # pointer to number of samples = ctypes.byref(self.cmaxSamples)
         # downsample ratiao = 0
@@ -432,7 +418,6 @@ class PicoscopeServer(ThreadedServer):
         assert_pico_ok(self.status["GetValues"])
 
         # Finds the max ADC count
-        # Handle = chandle
         # Value = ctype.byref(maxADC)
         maxADC = ctypes.c_int16()
         self.status["maximumValue"] = ps3.ps3000aMaximumValue(self.chandle, ctypes.byref(maxADC))
@@ -445,17 +430,12 @@ class PicoscopeServer(ThreadedServer):
         adc2mVChDMax = adc2mV(bufferDMax, chDRange, maxADC)
 
         # Stop the scope
-        # handle = chandle
         self.status["stop"] = ps3.ps3000aStop(self.chandle)
         assert_pico_ok(self.status["stop"])
 
         # Close unit Disconnect the scope
-        # handle = chandle
         self.status["close"]=ps3.ps3000aCloseUnit(self.chandle)
         assert_pico_ok(self.status["close"])
-
-        # display self.status returns
-        #print(self.status)
 
             ## SAVING DATA ##
 
@@ -463,31 +443,26 @@ class PicoscopeServer(ThreadedServer):
         time = np.linspace(-self.preTriggerSamples*timeIntervalns.value, (self.postTriggerSamples - 1) * timeIntervalns.value, self.cmaxSamples.value)
         
         # average over 32-segment long intervals
-        try:
-            time = np.mean(np.reshape(time,(-1,32)),1)
-            adc2mVChAMax = np.mean(np.reshape(adc2mVChAMax,(-1,32)),axis=1) # https://stackoverflow.com/questions/10847660/subsampling-averaging-over-a-numpy-array
-            adc2mVChBMax = np.mean(np.reshape(adc2mVChBMax,(-1,32)),axis=1)
-            adc2mVChCMax = np.mean(np.reshape(adc2mVChCMax,(-1,32)),axis=1)
-            adc2mVChDMax = np.mean(np.reshape(adc2mVChDMax,(-1,32)),axis=1)
+        time = np.mean(np.reshape(time,(-1,32)),1)
+        adc2mVChAMax = np.mean(np.reshape(adc2mVChAMax,(-1,32)),axis=1) # https://stackoverflow.com/questions/10847660/subsampling-averaging-over-a-numpy-array
+        adc2mVChBMax = np.mean(np.reshape(adc2mVChBMax,(-1,32)),axis=1)
+        adc2mVChCMax = np.mean(np.reshape(adc2mVChCMax,(-1,32)),axis=1)
+        adc2mVChDMax = np.mean(np.reshape(adc2mVChDMax,(-1,32)),axis=1)
 
-            #"""
-            # save data as a packed file
+        #"""
+        # save data as a packed file
 
-            packed = {}
-            packed["time_ns"] = time
-            packed["ChA_mV"] = adc2mVChAMax
-            packed["ChB_mV"] = adc2mVChBMax 
-            packed["ChC_mV"] = adc2mVChCMax
-            packed["ChD_mV"] = adc2mVChDMax
+        packed = {}
+        packed["time_ns"] = time
+        packed["ChA_mV"] = adc2mVChAMax
+        packed["ChB_mV"] = adc2mVChBMax 
+        packed["ChC_mV"] = adc2mVChCMax
+        packed["ChD_mV"] = adc2mVChDMax
 
-            np.savez(path,**packed)
-            #"""
-            
-            print(f'Picoscope trace saved at {path}')
-
-        except Exception as e:
-            print(e)
+        np.savez(path,**packed)
+        #"""
         
+        print(f'Picoscope trace saved at {path}')
 
 
 Server = PicoscopeServer
